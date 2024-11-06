@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Run Chart</title>
+
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link href="css/theme.css" rel="stylesheet" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;350&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css"
+      rel="stylesheet"
+    />
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+    <script src="js/authentication.js"></script>
+  </head>
+
+  <body class="kanit-medium" style="display: block" id="kpiContainer">
+    <div id="mainmenu"></div>
+
+    <script>
+      fetch("mainmenu.html")
+        .then((response) => response.text())
+        .then((data) => {
+          document.getElementById("mainmenu").innerHTML = data;
+        });
+    </script>
+
+    <div class="container-fluid mt-5">
+      <div class="mb-3">
+        <label for="monthRange" class="form-label">เลือกช่วงเดือน</label>
+        <div class="row">
+          <div class="col-md-3">
+            <input
+              type="month"
+              id="startMonth"
+              class="form-control"
+              placeholder="เลือกเดือนเริ่มต้น"
+              lang="th"
+            />
+          </div>
+          <div class="col-md-3 mt-2 mt-md-0">
+            <input
+              type="month"
+              id="endMonth"
+              class="form-control"
+              placeholder="เลือกเดือนสิ้นสุด"
+              lang="th"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="multiselect" class="form-label">เลือก KPI</label>
+        <select id="multiselect" class="form-select"></select>
+      </div>
+
+      <button class="btn btn-primary" id="loadDataBtn">โหลดข้อมูล</button>
+
+      <div class="accordion" id="kpiAccordion"></div>
+    </div>
+    <script>
+      $(document).ready(function () {
+        $("#multiselect").select2({
+          placeholder: "เลือก KPI", // Placeholder text
+        });
+      });
+    </script>
+
+    <script>
+      function getPreviousMonthstart() {
+        const date = new Date();
+        // Set the date to the first day of the current month
+        date.setMonth(date.getMonth() - 6);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1; // getMonth() returns 0-11, so we add 1
+        return `${year}-${month < 10 ? "0" + month : month}`;
+      }
+
+      function getPreviousMonthend() {
+        const date = new Date();
+        // Set the date to the first day of the current month
+        date.setMonth(date.getMonth() - 1);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1; // getMonth() returns 0-11, so we add 1
+        return `${year}-${month < 10 ? "0" + month : month}`;
+      }
+
+      // Set the default values for start and end months to the previous month
+      const previousStartMonth = getPreviousMonthstart();
+      const previousEndMonth = getPreviousMonthend();
+      document.getElementById("startMonth").value = previousStartMonth;
+      document.getElementById("endMonth").value = previousEndMonth;
+
+      document
+        .getElementById("startMonth")
+        .addEventListener("change", function () {
+          let startMonth = this.value;
+          let endMonth = document.getElementById("endMonth").value;
+
+          // If startMonth > endMonth, set endMonth to startMonth
+          if (startMonth > endMonth) {
+            document.getElementById("endMonth").value = startMonth;
+          }
+        });
+
+      document
+        .getElementById("endMonth")
+        .addEventListener("change", function () {
+          let endMonth = this.value;
+          let startMonth = document.getElementById("startMonth").value;
+
+          // If startMonth > endMonth, set endMonth to startMonth
+          if (startMonth > endMonth) {
+            document.getElementById("startMonth").value = endMonth;
+          }
+        });
+
+      async function syncData() {
+        try {
+          const response = await fetch(
+            "http://localhost:8000/runchart-syndata"
+          );
+          const result = await response.json();
+
+          document.getElementById("chartsContainer").innerHTML = "";
+          fetchData();
+        } catch (error) {
+          console.error("Error fetching data:", error);
+        }
+      }
+
+      async function fetchKpiOptions() {
+        try {
+          const response = await fetch(`http://localhost:8000/kpi-code`); // Replace with your API URL
+          const kpis = await response.json(); // Assuming the API returns a JSON array of KPIs
+
+          const selectElement = document.getElementById("multiselect");
+
+          // Clear existing options (if any)
+          selectElement.innerHTML = "";
+
+          // Loop through the fetched KPIs and create <option> elements
+          kpis.forEach((kpi) => {
+            const option = document.createElement("option");
+            option.value = kpi.temp_code; // or whatever the KPI ID field is
+            option.textContent = `${kpi.temp_code} : ${kpi.temp_name}`; // or the name/label of the KPI
+            selectElement.appendChild(option);
+          });
+        } catch (error) {
+          console.error("Error fetching KPI options:", error);
+        }
+      }
+
+      async function fetchData() {
+        try {
+          // Get the start and end month values
+          const startMonth = document.getElementById("startMonth").value;
+          const endMonth = document.getElementById("endMonth").value;
+
+          // Get the selected KPIs
+          const selectedKpis = document.getElementById("multiselect").value;
+
+          if (!startMonth || !endMonth) {
+            alert("Please select both start and end months.");
+            return;
+          }
+
+          // Construct the URL dynamically with selected values
+          const url = `http://localhost:8000/runchart/${startMonth}/${endMonth}/${selectedKpis}`;
+
+          const response = await fetch(url);
+          const result = await response.json();
+
+          const accordion = document.getElementById("kpiAccordion");
+          accordion.innerHTML = "";
+
+          console.log(result);
+          const groupedByKpi = result.reduce((acc, item) => {
+            const kpiCode = item.kpi_code;
+            if (!acc[kpiCode]) {
+              acc[kpiCode] = {};
+            }
+            const tempCode = item.temp_code;
+            const tempName = item.temp_name;
+            if (!acc[kpiCode][tempCode]) {
+              acc[kpiCode][tempCode] = { scores: [], dates: [], tempName };
+            }
+            acc[kpiCode][tempCode].scores.push(item.rc_score[0]);
+            acc[kpiCode][tempCode].dates.push(formatDate(item.score_date));
+            return acc;
+          }, {});
+
+          Object.keys(groupedByKpi).forEach((kpiCode) => {
+            createKpiAccordion(kpiCode, groupedByKpi[kpiCode]);
+          });
+        } catch (error) {
+          console.error("Error fetching data:", error);
+        }
+      }
+
+      function formatDate(dateString) {
+        const date = new Date(dateString);
+        const year = date.getFullYear() + 543; // Convert to Buddhist calendar
+        const monthAbbreviations = [
+          "ม.ค.",
+          "ก.พ.",
+          "มี.ค.",
+          "เม.ย.",
+          "พ.ค.",
+          "มิ.ย.",
+          "ก.ค.",
+          "ส.ค.",
+          "ก.ย.",
+          "ต.ค.",
+          "พ.ย.",
+          "ธ.ค.",
+        ];
+        const month = monthAbbreviations[date.getMonth()]; // Get abbreviated month
+        const day = date.getDate();
+        return `${day} ${month} ${year}`; // Return formatted date
+      }
+
+      function createKpiAccordion(kpiCode, tempData) {
+        const accordionItem = document.createElement("div");
+        accordionItem.className = "accordion-item";
+
+        // Accordion header
+        const headerId = `heading-${kpiCode}`;
+        const bodyId = `collapse-${kpiCode}`;
+
+        const accordionHeader = document.createElement("h2");
+        accordionHeader.className = "accordion-header";
+        accordionHeader.id = headerId;
+
+        const button = document.createElement("button");
+        button.className = "accordion-button";
+        button.type = "button";
+        button.setAttribute("data-bs-toggle", "collapse");
+        button.setAttribute("data-bs-target", `#${bodyId}`);
+        button.setAttribute("aria-expanded", "true");
+        button.setAttribute("aria-controls", bodyId);
+        button.textContent = `KPI Code: ${kpiCode}`;
+        accordionHeader.appendChild(button);
+        accordionItem.appendChild(accordionHeader);
+
+        // Accordion body
+        const accordionBody = document.createElement("div");
+        accordionBody.id = bodyId;
+        accordionBody.className = "accordion-collapse collapse show";
+        //accordionBody.setAttribute("aria-labelledby", headerId);
+        //accordionBody.setAttribute("data-bs-parent", `#kpiAccordion`);
+
+        const bodyContent = document.createElement("div");
+        bodyContent.className = "accordion-body row";
+
+        Object.keys(tempData).forEach((tempCode) => {
+          createTempCard(tempCode, tempData[tempCode], bodyContent);
+        });
+
+        accordionBody.appendChild(bodyContent);
+        accordionItem.appendChild(accordionBody);
+
+        document.getElementById("kpiAccordion").appendChild(accordionItem);
+      }
+
+      function createTempCard(
+        tempCode,
+        { scores, dates, tempName },
+        container
+      ) {
+        const coltempCard = document.createElement("div");
+        coltempCard.className = "col-6";
+
+        const tempCard = document.createElement("div");
+        tempCard.className = "card mb-3";
+
+        /*
+      const cardHeader = document.createElement("div");
+      cardHeader.className = "card-header";
+      cardHeader.textContent = `${tempCode} : ${tempName}`;
+      tempCard.appendChild(cardHeader); */
+
+        const cardBody = document.createElement("div");
+        cardBody.className = "card-body";
+        const canvas = document.createElement("canvas");
+        canvas.id = `chart-${tempCode}`;
+        cardBody.appendChild(canvas);
+
+        /*
+      const downloadButton = document.createElement("button");
+      downloadButton.textContent = "Download Chart";
+      downloadButton.onclick = () => downloadChart(canvas.id);
+      cardBody.appendChild(downloadButton);
+      */
+
+        tempCard.appendChild(cardBody);
+        coltempCard.appendChild(tempCard);
+        container.appendChild(coltempCard);
+
+        // Use setTimeout to ensure the canvas is available before rendering
+        setTimeout(() => {
+          renderChart(canvas.id, scores, dates, tempName, tempCode);
+        }, 0);
+      }
+
+      function renderChart(canvasId, data, dates, tempName, tempCode) {
+        const average =
+          data.reduce((sum, value) => sum + value, 0) / data.length;
+        const sd = Math.sqrt(
+          data.reduce((sum, value) => sum + Math.pow(value - average, 2), 0) /
+            data.length
+        );
+        //console.log(sd);
+
+        const averageData = new Array(data.length).fill(average);
+        const upperSDData = data.map(() => average + sd * 2);
+        const lowerSDData = data.map(() => average - sd * 2);
+
+        const ctx = document.getElementById(canvasId).getContext("2d");
+        let maxYValue = Math.max(average + sd * 2, Math.max(...data)) + 50;
+        let minYValue = Math.min(average - sd * 2, Math.min(...data)) - 50;
+
+        ctx.fillStyle = "white"; // Set the canvas background color
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+        const myChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: dates,
+            datasets: [
+              {
+                label: "KPI Value",
+                data: data,
+                borderColor: "rgba(75, 192, 192, 1)",
+                borderWidth: 2,
+                fill: false,
+              },
+              {
+                label: "AVG",
+                data: averageData,
+                borderColor: "rgba(255, 99, 132, 1)",
+                borderWidth: 1,
+                borderDash: [5, 5],
+                fill: false,
+              },
+              {
+                label: "UCL",
+                data: upperSDData,
+                borderColor: "rgba(0, 0, 139, 1)",
+                borderWidth: 1,
+                borderDash: [5, 5],
+                fill: false,
+              },
+              {
+                label: "LCL",
+                data: lowerSDData,
+                borderColor: "rgba(255, 128, 0, 1)",
+                borderWidth: 1,
+                borderDash: [5, 5],
+                fill: false,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: {
+                display: true,
+                text: `${tempCode} : ${tempName}`, // Set your chart title
+                font: {
+                  family: "Kanit", // Set Kanit font
+                  size: 20,
+                },
+                padding: {
+                  top: 10,
+                  bottom: 20,
+                },
+              },
+              legend: {
+                display: true,
+                position: "bottom", // Set the legend position to bottom
+                labels: {
+                  font: {
+                    size: 14, // Customize font size for legend labels if needed
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: "", // X-axis title in Thai
+                },
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: "ค่า",
+                },
+                beginAtZero: true,
+                min: minYValue,
+                max: maxYValue,
+              },
+            },
+          },
+        });
+        return myChart;
+      }
+
+      function downloadChart(canvasId) {
+        const chartCanvas = document.getElementById(canvasId);
+        const chartImage = chartCanvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.href = chartImage;
+        link.download = "chart.png";
+        link.click();
+      }
+
+      window.onload = async function () {
+        try {
+          //await checkSession(); // Ensure session check completes
+          fetchKpiOptions();
+          //fetchData();
+        } catch (error) {
+          console.error(
+            "An error occurred during the session check or data fetching:",
+            error
+          );
+        }
+      };
+
+      document
+        .getElementById("loadDataBtn")
+        .addEventListener("click", fetchData);
+
+      //setInterval(checkSession, 10000);
+      /*
+    document
+      .getElementById("kpiSearch")
+      .addEventListener("input", function () {
+        const searchTerm = this.value.toLowerCase();
+        const kpiItems = document.querySelectorAll(".accordion-item");
+
+        kpiItems.forEach((item) => {
+          const kpiCode = item
+            .querySelector(".accordion-button")
+            .textContent.toLowerCase();
+          if (kpiCode.includes(searchTerm)) {
+            item.style.display = ""; // Show the item
+          } else {
+            item.style.display = "none"; // Hide the item
+          }
+        });
+      }); */
+    </script>
+  </body>
+</html>
