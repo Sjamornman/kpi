@@ -52,10 +52,10 @@ app.use((req, res, next) => {
 // MySQL connection pool
 const local = mysql.createPool({
   connectionLimit: 10,
-  host: "54.169.53.106",
-  user: "kpi",
-  password: "Kpi@10706",
-  database: "kpi",
+  host: "",
+  user: "",
+  password: "",
+  database: "",
 });
 
 const localPool = local.promise();
