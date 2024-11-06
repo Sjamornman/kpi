@@ -144,7 +144,7 @@
       async function syncData() {
         try {
           const response = await fetch(
-            "http://localhost:8000/runchart-syndata"
+            "http://192.168.0.12:8000/runchart-syndata"
           );
           const result = await response.json();
 
@@ -157,7 +157,7 @@
 
       async function fetchKpiOptions() {
         try {
-          const response = await fetch(`http://localhost:8000/kpi-code`); // Replace with your API URL
+          const response = await fetch(`http://192.168.0.12:8000/kpi-code`); // Replace with your API URL
           const kpis = await response.json(); // Assuming the API returns a JSON array of KPIs
 
           const selectElement = document.getElementById("multiselect");
@@ -192,7 +192,7 @@
           }
 
           // Construct the URL dynamically with selected values
-          const url = `http://localhost:8000/runchart/${startMonth}/${endMonth}/${selectedKpis}`;
+          const url = `http://192.168.0.12:8000/runchart/${startMonth}/${endMonth}/${selectedKpis}`;
 
           const response = await fetch(url);
           const result = await response.json();
